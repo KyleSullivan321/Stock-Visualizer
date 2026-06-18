@@ -20,7 +20,12 @@ def ensure_crumb(force=False):
     return _crumb
 
 def chart_url(sym):
-    return f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(sym)}?range=1d&interval=1d"
+    # 1y of daily candles → enough to derive 1D/1W/1M/1Y changes from one call
+    return f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(sym)}?range=1y&interval=1d"
+
+def intraday_url(sym):
+    # today's 5-min candles → 15-min change
+    return f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(sym)}?range=1d&interval=5m"
 
 def news_url(sym):
     return f"https://query1.finance.yahoo.com/v1/finance/search?q={urllib.parse.quote(sym)}&newsCount=5&quotesCount=0"

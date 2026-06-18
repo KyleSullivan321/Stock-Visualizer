@@ -13,6 +13,7 @@ class H(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         p = urllib.parse.urlparse(self.path).path
         if p == "/quote":   return self.proxy(yahoo.chart_url(self.sym()))
+        if p == "/intraday":return self.proxy(yahoo.intraday_url(self.sym()))
         if p == "/summary": return self.reply(yahoo.summary_bytes(self.sym()))
         if p == "/news":    return self.proxy(yahoo.news_url(self.sym()))
         if p == "/":        self.path = "/index.html"

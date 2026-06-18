@@ -19,9 +19,10 @@ def main():
     out = {"updated": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="minutes"), "stocks": {}}
     for sym in TICKERS:
         out["stocks"][sym] = {
-            "quote":   jget(yahoo.chart_url(sym)),
-            "summary": json.loads(yahoo.summary_bytes(sym) or b"{}"),
-            "news":    jget(yahoo.news_url(sym)),
+            "quote":    jget(yahoo.chart_url(sym)),
+            "intraday": jget(yahoo.intraday_url(sym)),
+            "summary":  json.loads(yahoo.summary_bytes(sym) or b"{}"),
+            "news":     jget(yahoo.news_url(sym)),
         }
         time.sleep(0.3)  # be polite to Yahoo
     with open("data.json", "w", encoding="utf-8") as f:
