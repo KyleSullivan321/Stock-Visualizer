@@ -175,21 +175,32 @@
 <script>
 const DEFAULT = "GOOG,AAPL,MSFT,TSLA,SPCX,PLTR,NOW,TSM,QQQ,SPY,VRT,CRWV,LLY,CEG,VST,META,RKLB,QCOM,MU";
 
-// ponytail: hardcoded sector map. No classification API exists for free; a lookup table is the lazy correct answer.
-// Add tickers here to group them; anything unknown lands in "Other".
-const SECTOR = {
+// Sector map. Curated defaults below; unknown tickers are auto-classified from
+// Yahoo's assetProfile.sector the first time their panel is opened (cached in
+// localStorage), so anything you add lands in the right group after one click.
+const SECTOR_SEED = {
   GOOG:"Technology", MSFT:"Technology", META:"Technology", NOW:"Technology", PLTR:"Technology",
-  AAPL:"Technology", TSM:"Semiconductors", QCOM:"Semiconductors", MU:"Semiconductors",
+  AAPL:"Technology", TSM:"Semiconductors", QCOM:"Semiconductors", MU:"Semiconductors", NVDA:"Semiconductors",
   TSLA:"Consumer / Auto", SPCX:"Aerospace", RKLB:"Aerospace",
   LLY:"Healthcare",
   CEG:"Energy / Utilities", VST:"Energy / Utilities", VRT:"Energy / Utilities", CRWV:"Technology",
   QQQ:"ETFs", SPY:"ETFs",
 };
+const SECTOR = { ...SECTOR_SEED, ...JSON.parse(localStorage.getItem("sectors") || "{}") };
+
+function rememberSector(sym, yahooSector) {
+  if (!yahooSector || SECTOR_SEED[sym] || SECTOR[sym] === yahooSector) return;  // don't override curated seed
+  SECTOR[sym] = yahooSector;
+  const cache = JSON.parse(localStorage.getItem("sectors") || "{}");
+  cache[sym] = yahooSector;
+  localStorage.setItem("sectors", JSON.stringify(cache));
+  if (lastData) paint();   // regroup now that we know the sector
+}
 
 const $map = document.getElementById("map");
 const $status = document.getElementById("status");
 const $tickers = document.getElementById("tickers");
-$tickers.value = DEFAULT;
+$tickers.value = localStorage.getItem("tickers") || DEFAULT;   // persist edits across refresh
 
 document.getElementById("go").onclick = run;
 document.getElementById("refresh").onclick = run;
@@ -207,6 +218,8 @@ document.getElementById("tf").addEventListener("click", e => {
 
 async function run() {
   const syms = $tickers.value.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+  $tickers.value = syms.join(",");                  // normalize the box
+  localStorage.setItem("tickers", $tickers.value);  // persist across refresh
   if (!rawData) document.getElementById("loading").classList.add("on");
   $status.textContent = "loading…";
   rawData = await Promise.all(syms.map(fetchQuote));
@@ -469,6 +482,7 @@ function renderPanel(d, r, news) {
   const money = v => v == null || !isFinite(v) ? "—" : `$${(+v).toFixed(2)}`;
   const longName = price.longName || price.shortName;
   if (longName) $("p-name").textContent = longName;
+  rememberSector(d.sym, prof.sector);   // auto-classify unknown tickers for grouping
 
   // "Why it's moving" — honest version: factual price-action line + headlines below.
   const up = d.pct >= 0, dir = up ? "up" : "down";
