@@ -182,30 +182,45 @@ async function run() {
   const all = results.map(r => isFinite(r.pct) ? r : { ...r, failed: true });
   const okCount = all.filter(r => !r.failed).length;
   const failed = all.filter(r => r.failed).map(r => r.sym);
-  const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  $status.innerHTML = `<b style="color:#cdd3de">${okCount}</b> loaded · ${time}`
+  let when = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + " (live)";
+  if (!HAS_SERVER && SNAPSHOT?.updated) {
+    const t = new Date(SNAPSHOT.updated);
+    when = `snapshot ${t.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+  }
+  $status.innerHTML = `<b style="color:#cdd3de">${okCount}</b> loaded · ${when}`
     + (failed.length ? ` · <span title="no data">${failed.length} unavailable</span>` : "");
   lastData = all;
   render(all);
 }
 
-// Data layer. Local `python server.py` provides /quote,/summary,/news (fast, reliable).
-// On GitHub Pages there's no server, so fall back to a public CORS proxy hitting Yahoo directly.
+// Data layer. Local `python server.py` provides /quote,/summary,/news live.
+// On GitHub Pages there's no server, so we read a pre-built data.json snapshot
+// (refreshed by a GitHub Action). Browsers can't call Yahoo directly (CORS).
 const HAS_SERVER = location.port === "8000" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
-const Y = "https://query1.finance.yahoo.com";
-const PROXY = u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`;
+let SNAPSHOT = null;
 
-async function yget(localPath, yahooUrl) {
-  const url = HAS_SERVER ? localPath : PROXY(yahooUrl);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(res.status);
-  return res.json();
+async function loadSnapshot() {
+  if (SNAPSHOT || HAS_SERVER) return SNAPSHOT;
+  try { SNAPSHOT = await fetch("data.json").then(r => r.json()); } catch { SNAPSHOT = { stocks: {} }; }
+  return SNAPSHOT;
+}
+
+// returns parsed JSON for a section ("quote"|"summary"|"news") of a symbol
+async function yget(section, sym, localPath) {
+  if (HAS_SERVER) {
+    const res = await fetch(localPath);
+    if (!res.ok) throw new Error(res.status);
+    return res.json();
+  }
+  await loadSnapshot();
+  const s = SNAPSHOT.stocks?.[sym.toUpperCase()];
+  if (!s || !s[section]) throw new Error("no snapshot");
+  return s[section];
 }
 
 async function fetchQuote(sym) {
   try {
-    const j = await yget(`/quote?s=${encodeURIComponent(sym)}`,
-      `${Y}/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1d`);
+    const j = await yget("quote", sym, `/quote?s=${encodeURIComponent(sym)}`);
     const m = j?.chart?.result?.[0]?.meta;
     if (!m) return { sym, pct: NaN };
     const price = m.regularMarketPrice, prev = m.chartPreviousClose;
@@ -363,14 +378,9 @@ async function openPanel(d) {
   $("p-body").innerHTML = `<p class="muted">Loading analysis…</p>`;
   $panel.classList.add("open"); $scrim.classList.add("open");
 
-  // Summary needs Yahoo's crumb (server-only); on Pages it 401s, so we degrade gracefully.
   const [summary, news] = await Promise.all([
-    yget(`/summary?s=${encodeURIComponent(d.sym)}`,
-      `${Y}/v10/finance/quoteSummary/${encodeURIComponent(d.sym)}?modules=assetProfile,financialData,summaryDetail,defaultKeyStatistics,price`)
-      .catch(() => ({})),
-    yget(`/news?s=${encodeURIComponent(d.sym)}`,
-      `${Y}/v1/finance/search?q=${encodeURIComponent(d.sym)}&newsCount=5&quotesCount=0`)
-      .catch(() => ({})),
+    yget("summary", d.sym, `/summary?s=${encodeURIComponent(d.sym)}`).catch(() => ({})),
+    yget("news", d.sym, `/news?s=${encodeURIComponent(d.sym)}`).catch(() => ({})),
   ]);
   if (token !== panelToken) return; // user clicked another tile meanwhile
 
@@ -410,7 +420,7 @@ function renderPanel(d, r, news) {
   </div>`;
 
   const newsHtml = news.length ? `<div class="news">` + news.slice(0, 5).map(n =>
-      `<a href="${n.link}" target="_blank" rel="noopener">${esc(n.title)}<small>${esc(n.publisher || "")}</small></a>`
+      `<a href="${safeHref(n.link)}" target="_blank" rel="noopener">${esc(n.title)}<small>${esc(n.publisher || "")}</small></a>`
     ).join("") + `</div>` : `<p class="muted">No recent headlines found.</p>`;
 
   const summaryText = prof.longBusinessSummary
@@ -446,7 +456,12 @@ function bigNum(v) {
   for (const [s, n] of u) if (v >= n) return `$${(v / n).toFixed(2)}${s}`;
   return `$${v}`;
 }
-const esc = s => (s || "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const esc = s => (s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+// only http(s) URLs survive; anything else (javascript:, data:, …) becomes "#"
+function safeHref(link) {
+  try { const u = new URL(link, location.href); return /^https?:$/.test(u.protocol) ? esc(u.href) : "#"; }
+  catch { return "#"; }
+}
 const trim = (s, n) => s.length > n ? s.slice(0, s.lastIndexOf(" ", n)) + "…" : s;
 
 run();
