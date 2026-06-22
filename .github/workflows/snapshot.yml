@@ -2,11 +2,13 @@ name: Refresh data snapshot
 
 on:
   schedule:
-    # every 15 min, 13:30–20:00 UTC (US market hours ~9:30am–4pm ET), Mon–Fri.
-    # cron has no step within an hour cleanly, so list the quarters:
+    # every 15 min, 13:30–20:45 UTC (US market ~9:30am–4pm ET + settle), Mon–Fri.
+    # NOTE: GitHub heavily throttles scheduled Actions on free runners — runs are
+    # often delayed or skipped, so the Pages snapshot can lag the market by an
+    # hour+. The UI flags snapshot age. For real-time, run server.py locally.
     - cron: "0,15,30,45 14-19 * * 1-5"
     - cron: "30,45 13 * * 1-5"
-    - cron: "0 20 * * 1-5"
+    - cron: "0,15,30,45 20 * * 1-5"
   workflow_dispatch: {}   # allow manual runs
 
 permissions:
