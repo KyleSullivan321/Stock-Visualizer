@@ -173,7 +173,8 @@
 </aside>
 
 <script>
-const DEFAULT = "GOOG,AAPL,MSFT,TSLA,SPCX,PLTR,NOW,TSM,QQQ,SPY,VRT,CRWV,LLY,CEG,VST,META,RKLB,QCOM,MU";
+const DEFAULT = "GOOG,AAPL,MSFT,NVDA,TSLA,SPCX,PLTR,NOW,TSM,QQQ,SPY,VRT,CRWV,LLY,CEG,VST,META,RKLB,QCOM,MU";
+const DEFAULT_VERSION = "2";  // bump when DEFAULT changes to merge new tickers into saved lists
 
 // Sector map. Curated defaults below; unknown tickers are auto-classified from
 // Yahoo's assetProfile.sector the first time their panel is opened (cached in
@@ -200,7 +201,22 @@ function rememberSector(sym, yahooSector) {
 const $map = document.getElementById("map");
 const $status = document.getElementById("status");
 const $tickers = document.getElementById("tickers");
-$tickers.value = localStorage.getItem("tickers") || DEFAULT;   // persist edits across refresh
+$tickers.value = initialTickers();
+
+// persist edits across refresh; when DEFAULT gains tickers (version bump), merge
+// the new ones into the saved list so existing users get them too.
+function initialTickers() {
+  const saved = localStorage.getItem("tickers");
+  if (!saved) return DEFAULT;
+  if (localStorage.getItem("tickersVersion") !== DEFAULT_VERSION) {
+    const have = new Set(saved.split(",").map(s => s.trim().toUpperCase()));
+    const merged = saved.split(",").map(s => s.trim()).filter(Boolean)
+      .concat(DEFAULT.split(",").filter(s => !have.has(s)));
+    localStorage.setItem("tickersVersion", DEFAULT_VERSION);
+    return merged.join(",");
+  }
+  return saved;
+}
 
 document.getElementById("go").onclick = run;
 document.getElementById("refresh").onclick = run;
@@ -220,6 +236,7 @@ async function run() {
   const syms = $tickers.value.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
   $tickers.value = syms.join(",");                  // normalize the box
   localStorage.setItem("tickers", $tickers.value);  // persist across refresh
+  localStorage.setItem("tickersVersion", DEFAULT_VERSION);
   if (!rawData) document.getElementById("loading").classList.add("on");
   $status.textContent = "loading…";
   rawData = await Promise.all(syms.map(fetchQuote));
@@ -276,11 +293,15 @@ async function yget(section, sym, localPath) {
 const TIMEFRAMES = ["15m", "1D", "1W", "1M", "1Y"];
 let TF = "1D";
 
-// closes array (oldest→newest), with nulls dropped
-const closes = j => {
+// [{t,close}] oldest→newest, nulls dropped, keeping timestamps aligned
+const series = j => {
   const r = j?.chart?.result?.[0];
-  return (r?.indicators?.quote?.[0]?.close || []).filter(v => v != null);
+  const ts = r?.timestamp || [];
+  const cl = r?.indicators?.quote?.[0]?.close || [];
+  return ts.map((t, i) => ({ t, close: cl[i] })).filter(p => p.close != null);
 };
+const sameUTCDay = (a, b) =>
+  new Date(a * 1000).toISOString().slice(0, 10) === new Date(b * 1000).toISOString().slice(0, 10);
 const change = (now, then) => (then && isFinite(then)) ? (now - then) / then * 100 : NaN;
 
 async function fetchQuote(sym) {
@@ -290,20 +311,25 @@ async function fetchQuote(sym) {
       yget("intraday", sym, `/intraday?s=${encodeURIComponent(sym)}`).catch(() => ({})),
     ]);
     const m = day?.chart?.result?.[0]?.meta;
-    const c = closes(day);                              // ~252 daily closes
-    const price = m?.regularMarketPrice ?? c[c.length - 1];
-    if (!isFinite(price) || !c.length) return { sym, pct: NaN };
+    let s = series(day);                                 // [{t,close}] completed+maybe-today
+    const price = m?.regularMarketPrice ?? s[s.length - 1]?.close;
+    if (!isFinite(price) || !s.length) return { sym, pct: NaN };
 
-    const ic = closes(intra);                           // today's 5-min closes
-    // is the last daily candle today's (market open/just-closed) or already yesterday's?
-    // Either way, prior-day close is the candle before the most recent one.
-    const at = n => c[c.length - 1 - n];                // n daily candles back
+    // Drop today's candle if present, so `s` is only COMPLETED prior days. Then
+    // `price` is "now" and s[-1] is yesterday's close — correct whether market is
+    // open or closed, and avoids the off-by-one that skewed 1D.
+    const now = m?.regularMarketTime ?? Math.floor(Date.now() / 1000);
+    if (s.length && sameUTCDay(s[s.length - 1].t, now)) s = s.slice(0, -1);
+    const c = s.map(p => p.close);
+
+    const ic = series(intra).map(p => p.close);          // today's 5-min closes
+    const at = n => c[c.length - n];                     // n completed days back (1 = yesterday)
     const deltas = {
       "15m": ic.length > 3 ? change(price, ic[ic.length - 4]) : NaN,  // 3×5m ≈ 15m
-      "1D":  change(price, at(1)),                       // vs prior daily close
-      "1W":  change(price, at(5)),                       // ~5 trading days
-      "1M":  change(price, at(21)),                      // ~21 trading days
-      "1Y":  change(price, c[0]),                        // ~1 year ago
+      "1D":  change(price, at(1)),                        // vs yesterday's close
+      "1W":  change(price, at(5)),                        // ~5 trading days
+      "1M":  change(price, at(21)),                       // ~21 trading days
+      "1Y":  change(price, c[0]),                         // ~1 year ago
     };
     return { sym, price, deltas, pct: deltas[TF] };
   } catch {
