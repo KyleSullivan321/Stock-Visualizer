@@ -60,6 +60,18 @@
   @keyframes spin { to { transform:rotate(360deg); } }
 
   /* legend */
+  /* stale-data banner */
+  #banner {
+    position:absolute; top:64px; left:50%; transform:translateX(-50%); z-index:6;
+    max-width:min(720px,94vw); display:flex; align-items:center; gap:12px;
+    background:#2a2418; border:1px solid #5a4a22; color:#e8c98a;
+    padding:9px 14px; border-radius:9px; font-size:12.5px; box-shadow:0 6px 20px rgba(0,0,0,.4);
+  }
+  #banner[hidden] { display:none; }
+  #banner b { color:#f3dca3; }
+  #banner .x { margin-left:auto; background:none; border:none; color:#bda874; font-size:16px; cursor:pointer; padding:0 4px; }
+  #banner .x:hover { color:#f3dca3; filter:none; }
+
   #legend {
     position:absolute; left:20px; bottom:18px; z-index:3; display:flex; align-items:center; gap:14px;
     background:var(--panel); border:1px solid var(--line);
@@ -146,6 +158,8 @@
   <span id="status"></span>
 </header>
 <div id="map" role="list" aria-label="Stock heatmap"></div>
+
+<div id="banner" hidden></div>
 
 <div id="loading"><div class="spinner"></div><div>Loading market data…</div></div>
 
@@ -263,11 +277,25 @@ function paint() {
     const stale = mins > 30 ? ` style="color:#e0a34a"` : "";
     const label = mins > 30 ? `snapshot ${ago} — prices may have moved` : `snapshot ${ago}`;
     when = `<span${stale} title="${t.toLocaleString()}">${label}</span>`;
+    showBanner(mins, ago);
   }
   $status.innerHTML = `<b>${okCount}</b> loaded · ${when}`
     + (failed.length ? ` · <span title="no data for ${TF}">${failed.length} n/a</span>` : "");
   lastData = all;
   render(all);
+}
+
+// One-time stale-data explainer on the Pages demo (snapshot can lag the market
+// because GitHub throttles the refresh Action). Dismissible.
+let bannerDismissed = false;
+function showBanner(mins, ago) {
+  const el = document.getElementById("banner");
+  if (mins <= 45 || bannerDismissed) { el.hidden = true; return; }
+  el.innerHTML = `<span>📊 Showing a <b>snapshot from ${ago}</b> — live prices may differ. `
+    + `This demo refreshes periodically; for real-time data, run it locally with <b>python server.py</b>.</span>`
+    + `<button class="x" title="Dismiss">×</button>`;
+  el.querySelector(".x").onclick = () => { bannerDismissed = true; el.hidden = true; };
+  el.hidden = false;
 }
 
 // Data layer. Local `python server.py` provides /quote,/summary,/news live.
