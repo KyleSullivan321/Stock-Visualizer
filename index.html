@@ -187,14 +187,14 @@
 </aside>
 
 <script>
-const DEFAULT = "GOOG,AAPL,MSFT,NVDA,AMZN,TSLA,UBER,SPCX,PLTR,NOW,TSM,QQQ,SPY,VRT,CRWV,LLY,CEG,VST,META,RKLB,QCOM,MU,INTC,NOK";
-const DEFAULT_VERSION = "4";  // bump when DEFAULT changes to merge new tickers into saved lists
+const DEFAULT = "GOOG,AAPL,MSFT,NVDA,AMZN,TSLA,UBER,SPCX,PLTR,NOW,TSM,QQQ,SPY,VRT,CRWV,LLY,CEG,VST,META,RKLB,QCOM,MU,INTC,NOK,FIG";
+const DEFAULT_VERSION = "5";  // bump when DEFAULT changes to merge new tickers into saved lists
 
 // Sector map. Curated defaults below; unknown tickers are auto-classified from
 // Yahoo's assetProfile.sector the first time their panel is opened (cached in
 // localStorage), so anything you add lands in the right group after one click.
 const SECTOR_SEED = {
-  GOOG:"Technology", MSFT:"Technology", META:"Technology", NOW:"Technology", PLTR:"Technology", NOK:"Technology",
+  GOOG:"Technology", MSFT:"Technology", META:"Technology", NOW:"Technology", PLTR:"Technology", NOK:"Technology", FIG:"Technology",
   AAPL:"Technology", TSM:"Semiconductors", QCOM:"Semiconductors", MU:"Semiconductors", NVDA:"Semiconductors", INTC:"Semiconductors",
   TSLA:"Consumer / Auto", SPCX:"Aerospace", RKLB:"Aerospace",
   AMZN:"Consumer / Auto", UBER:"Consumer / Auto",
