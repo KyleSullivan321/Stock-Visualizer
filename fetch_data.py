@@ -7,7 +7,7 @@ import json, time, re, datetime
 import yahoo
 
 # keep in sync with DEFAULT in index.html
-TICKERS = "GOOG,AAPL,MSFT,NVDA,AMZN,TSLA,UBER,SPCX,PLTR,NOW,TSM,QQQ,SPY,VRT,CRWV,LLY,CEG,VST,META,RKLB,QCOM,MU,INTC,NOK,FIG".split(",")
+TICKERS = "GOOG,AAPL,MSFT,NVDA,AMZN,TSLA,UBER,SPCX,PLTR,NOW,TSM,QQQ,SPY,VRT,CRWV,LLY,CEG,VST,META,RKLB,QCOM,MU,INTC,NOK,FIG,GEV,GD,SPGI,V".split(",")
 
 def jget(url):
     try:
